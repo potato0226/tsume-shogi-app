@@ -1,0 +1,1494 @@
+<html>
+<head>
+<script language="javascript">
+
+ var lastPos = "";
+ var lastClick = "";
+
+function execTest1(){
+ var state1 = getStateFromBoard();
+ alert(state1[11]);
+ alert(state1[1]);
+ state1 = getFutureState("+0088KI",state1);
+ alert(state1[1]);
+
+ getBoardFromState(state1);
+ alert("end");
+}
+
+function setFinalList(alllist,alldict,maxstep){
+ formT.logT.value +=("finallist ..." + alllist.length) + "\n";
+ finallist=[];
+ dictkeys=Object.keys(alldict)
+ for(i=0;i<=dictkeys.length-1;i++){
+	actions=dictkeys[i];
+	if(alldict[actions] == -1){actions="";}
+	if(actions.length / 7 == maxstep){finallist.push(actions);}
+ }
+
+ formT.logT.value+="finallist length=" + finallist.length + "\n";
+ formT.logT.value+= (Date.now() - alldict["STIME"]) / 1000 + " " + alldict["COUNT"] + "\n";
+ if(finallist.length==0){return;}
+ formT.resT.value ="" + finallist;
+ for(i=0;i<=finallist.length-1;i++){
+	actions=finallist[i];
+	formT.logT.value+=actions + "\n";
+ }
+}
+
+function exploreActionAsync(alllist,state,flg,alldict,maxstep,explorelist){
+	if(explorelist.length==0){setFinalList(alllist,alldict,maxstep);return;
+	}else{
+		alldict["COUNT"] += 1;
+		actions=explorelist.pop();
+		exploreNextActions2(alllist,actions,state,flg,alldict,maxstep,explorelist);
+		if(alldict["COUNT"] % 10 ==1){
+
+		var ptime = parseInt((Date.now() - alldict["STIME"]) /1000);
+		var cnt = alldict["COUNT"];
+		formT.resT.value= ptime + "sec; " + cnt + "; "  + explorelist.length + " / " + alllist.length;
+		setTimeout(function(a,b,c,d,e,f){exploreActionAsync(a,b,c,d,e,f);},10,alllist,state,flg,alldict,maxstep,explorelist);
+		}else{
+			exploreActionAsync(alllist,state,flg,alldict,maxstep,explorelist);
+		}
+
+	}
+}
+
+
+function exploreNextActions2(alllist,actions,state,flg,alldict,maxstep,explorelist){
+	var actions_orig=actions + "";
+	//formT.logT.value+="explore actions.." + actions + "\n";
+	formT.logT.value="explore actions.." + actions + "\n";
+
+	var istep = actions.length / 7;
+	var lastaction = actions.substr(7*(istep-1),7);
+	for(i=0;i<=explorelist.length-1;i++){
+		if(explorelist[i]==actions){explorelist.splice(i,1);break;}	
+	}
+	if(actions in alldict == false){return;}
+	if(alldict[actions]==-1){return;}
+	var cstate=[];
+	//詰まない手は上位から削除を実装
+	cstate=getFutureState(actions,state);
+
+	if(istep==maxstep){
+		if(getNogareList(cstate,getAiteFlg(flg)).length > 0){
+			alldict[actions]=-1;
+			var prev_action=actions.substr(0,actions.length-7);
+			//if(isEmptyAction(alldict,prev_action)){updateParentDict(alldict,prev_action);}
+			if(isEmptyAction(alldict,prev_action)){updateParentDict(alldict,prev_action,alldict["KEYS"]);}
+		}
+	}
+
+	if(istep>=maxstep){return;}
+
+	var tsumeflg;
+	if(istep % 2 == 0){tsumeflg=1;}else{tsumeflg=0;}
+	
+	//addAllList1を直接実装
+	var newlist=[];
+	var aiteflg = getAiteFlg(flg);
+
+	if(tsumeflg==1){newlist=getOuteList(cstate,flg);}else{newlist=getNogareList(cstate,aiteflg);}
+	newactions="";
+	var i =0;
+	 if(newlist.length==0){updateParentDict(alldict,actions);return;}
+	
+	 for(i=0;i<=newlist.length-1;i++){
+		actCode = newlist[i];
+		newactions = actions_orig + actCode;
+		alllist.push(newactions);	
+		alldict[newactions] = 0
+		explorelist.push(newactions);
+		//explorelist.unshift(newactions);
+		alldict["KEYS"].push(newactions);
+	}
+}
+
+
+
+    //非同期モード
+function getTsumiList2(state,flg,maxstep){
+ var alllist = [];
+ var i = 0; var j = 0; var istep = 0;
+ var tsumeflg = 0;
+ var explorelist=[];
+ var alllist = getOuteList(state,flg);
+ var newlist = Object.assign([],alllist);
+
+ alldict = {};
+ for(i=0;i<=newlist.length-1;i++){
+	alldict[newlist[i]]=0;
+	explorelist.push(alllist[i]);
+ }
+ alldict["STIME"] = Date.now();
+ alldict["ETIME"] = Date.now();
+ alldict["COUNT"] = 0;
+ alldict["KEYS"] = newlist;
+ formT.logT.value=""; formT.resT.value="";
+ exploreActionAsync(alllist,state,flg,alldict,maxstep,explorelist,10);
+}
+
+
+
+
+function isReduceAction(actCode){
+ //複雑性排除モードの時の除外判定
+ var flg = actCode.substr(0,1);
+ var posFrom = actCode.substr(1,2);
+ var posTo = actCode.substr(3,2);
+ var icon = actCode.substr(5,2);
+
+ var posFromx = parseInt(posFrom.substr(0,1))
+ var posFromy = parseInt(posFrom.substr(1,1))
+ var posTox = parseInt(posTo.substr(0,1))
+ var posToy = parseInt(posTo.substr(1,1))
+
+ if(flg=="+"){
+	if(formT.easyModeT3.value=="1" & posFrom != "00"){
+		if(icon=="FU" | icon=="KA" | icon=="HI"){
+			if(posFromy <= 3 | posToy <= 3){return true;}
+		}
+		if(icon=="KY"){
+			if(posToy == 2){return true;}
+		}
+	}
+ }
+ if(flg=="-"){
+	if(posFrom == "00"){
+		if(formT.easyModeT1.value=="1"){return true;}
+		if(formT.easyModeT2.value=="1"){
+			if(icon=="FU" | icon=="KY"){return false;}else{return true;}
+		}
+	}
+ }
+ return false;
+}
+
+
+function getAiteFlg(flg){
+ if(flg=="+"){return "-";}else{return "+";}
+}
+
+
+function updateParentDict(alldict,action,inkey=[]){
+	alldict[action] = -1;
+	// n 手目で、次のn+1手目が空の場合、前の n-1手目を相手が選択しないようにする
+	if(action.length <= 7){return;}
+	var prev_action = action.substr(0, action.length - 7);
+	alldict[prev_action] = -1;
+
+	//子もすべて選択しないようにする。
+	//dictkeys=Object.keys(alldict).sort();
+	//alldict["KEYS"].sort();
+	if(inkey.length>0){dictkey=inkey;
+		}else{
+			alldict["KEYS"].sort();
+			dictkeys=alldict["KEYS"];
+	}
+
+	var dictkey=""; var dltcnt=0;
+	ix=dictkeys.indexOf(prev_action);
+	for(i=0;i<=dictkeys.length-ix-1;i++){
+		dictkey=dictkeys[ix+i];
+		if(dictkey.substr(0,prev_action.length)!=prev_action){break;}
+		if(dictkey in alldict){
+			alldict[dictkey]=-1;
+			delete alldict[dictkey];
+			dltcnt+=1;
+		}
+	}
+	alldict["KEYS"] = Object.keys(alldict);
+	if(dltcnt > 200){alldict["KEYS"].sort();dictkeys=alldict["KEYS"];}
+
+	// n-2手目が空であるかをチェック
+	if(prev_action.length <= 7){return;}
+	var prev2_action=prev_action.substr(0,prev_action.length-7);
+	
+	//if(isEmptyAction(alldict,prev2_action)){updateParentDict(alldict,prev2_action);}
+	if(isEmptyActionR(alldict,prev2_action,dictkeys)){updateParentDict(alldict,prev2_action,dictkeys);return;}
+}
+
+function isEmptyAction(alldict,action){
+	//dictkeys=Object.keys(alldict).sort();
+	alldict["KEYS"].sort();
+	dictkeys=alldict["KEYS"];
+
+	var dictkey="";
+	ix=dictkeys.indexOf(action);
+	if(ix==-1){return;}
+	for(i=0;i<=dictkeys.length-ix-1;i++){
+		dictkey=dictkeys[ix+i];
+		if(dictkey.substr(0,action.length)!=action){break;}
+		if(dictkey in alldict){
+		if(alldict[dictkey] != -1 & dictkey != action){return false;}
+		}
+	}
+	return true;
+}
+
+  //整列済みのリスト付き
+function isEmptyActionR(alldict,action,dictkeys){
+	var dictkey="";
+	ix=dictkeys.indexOf(action);
+	if(ix==-1){return;}
+	for(i=0;i<=dictkeys.length-ix-1;i++){
+		dictkey=dictkeys[ix+i];
+		if(dictkey.substr(0,action.length)!=action){break;}
+		if(dictkey in alldict){
+		if(alldict[dictkey] != -1 & dictkey != action){return false;}
+		}
+	}
+	return true;
+}
+
+
+
+
+function getAllList(state,flg,maxstep){
+ var alllist = [];
+ var i = 0; var j = 0; var istep = 0;
+ var tsumeflg = 0;
+ cstate={};
+ prelist=[];
+ //alllist.push(getOuteList(state,flg));
+ alllist = getOuteList(state,flg);
+ var actions=[];
+ for(istep=1;istep<=maxstep;istep++){
+	var sellist = Object.assign([],alllist);
+	if(istep % 2 == 1){tsumeflg=1;}else{tsumeflg=0;}
+	for(i=0;i<=sellist.length-1;i++){
+		actions=sellist[i];
+		if(actions.length == 7*(istep-1)){
+			cstate=getFutureState(actions,state);
+			addAllList1(alllist,actions,cstate,flg,tsumeflg);
+		}
+	}
+ }
+ finallist=[];
+ for(i=0;i<=alllist.length-1;i++){
+	actions=alllist[i];
+	if(actions.length == 7* maxstep){
+		finallist.push(actions);
+	}
+ }
+ return finallist;
+}
+
+
+
+
+
+
+function addAllList1(alllist,actions,state,flg,tsumeflg,alldict){
+ newlist=[];
+
+ aiteflg = "";
+ if(flg=="+"){aiteflg="-";}else{aiteflg="+";}
+ if(tsumeflg==1){newlist=getOuteList(state,flg);}else{newlist=getNogareList(state,aiteflg);}
+ newactions="";
+ var i =0;
+
+ if(newlist.length==0){updateParentDict(alldict,actions);return;}
+
+ for(i=0;i<=newlist.length-1;i++){
+	actCode = newlist[i];
+	newactions = actions + actCode;
+	alllist.push(newactions);	
+	alldict[newactions] = 0
+ }
+ return; 
+}
+
+function getFutureState(actions,state){
+ var nstate=Object.assign({},state);
+ var i = 0;
+ if(actions.length == 0){return state;}
+ for(i=0;i<actions.length / 7;i++){
+	nstate=getNextState(actions.substr(i*7,7),nstate);
+ }
+ return nstate;
+}
+
+
+function isUchifu(actCode,state){
+ if(actCode.length != 7){return false;}
+ var flg = actCode.substr(0,1);
+ var aiteflg = getAiteFlg(flg);
+ if(actCode.substr(1,2) != "00"){return false;}
+ if(actCode.substr(5,2) != "FU"){return false;}
+ var posx=parseInt(actCode.substr(3,1));
+ var posy=parseInt(actCode.substr(4,1));
+ if(flg=="+" & posy>=2){if(state[posx*10+posy-1] != aiteflg+"OU")return false;}
+ nstate = getNextState(actCode,state);
+ if(isOute(nstate,flg) == false){return false;}
+ if(getNogareList(nstate,aiteflg).length == 0){return true;}else{return false;}
+}
+
+function getNogareListG(state){
+ return getNogareList(state,"-");
+}
+function getNogareList(state,flg){
+ var legallist = getLegalList(state,flg);
+ var nstate={};
+ var res = [];
+ var i = 0; var actCode = "";
+ var aiteflg = "";
+ if(flg=="+"){aiteflg="-";}else{aiteflg="+";}
+ for(i=0;i<legallist.length;i++){
+	actCode = legallist[i];
+	if(isReduceAction(actCode)==false){
+	 nstate=getNextState(actCode,state);
+	 if(isOute(nstate,aiteflg) == false){res.push(actCode);}
+	}
+ }
+ return res;
+}
+
+
+
+function getOuteListS(state){
+ return getOuteList(state,"+");
+}
+function getOuteList(state,flg){
+ var legallist = getLegalList(state,flg);
+ var nstate={};
+ var res = [];
+ var i = 0; var actCode = "";
+ var posOu = getPosOu(state,flg);
+ var inPos=0;
+ for(i=0;i<legallist.length;i++){
+	actCode = legallist[i];
+	if(isReduceAction(actCode) == false){
+		 nstate=getNextState(actCode,state);
+		 if(actCode.substr(1,2)=="00"){inPos=parseInt(actCode.substr(3,2));}else{inPos=0;}
+		 if(isOute(nstate,flg,posOu,inPos)){if(isUchifu(actCode,state)==false){res.push(actCode);}}
+	}
+ }
+ return res;
+}
+
+
+function getNextState(actCode,state){
+ var nstate=Object.assign({},state);
+ var flg = actCode.substr(0,1);
+ var posFrom = actCode.substr(1,2);
+ var posTo = actCode.substr(3,2);
+ var icon = actCode.substr(5,2);
+
+ //var targTo = document.getElementById(parseInt(posTo));
+ var targTo = state[parseInt(posTo)];
+ var poskoma = 0;
+ if(flg=="+"){poskoma=1;}else{poskoma=2;} 	
+
+ //相手の駒があれば取る
+ if(targTo != " * "){
+    //nstate[poskoma] += "00" + getDemotion(targTo.substr(1,2));
+    nstate[poskoma] += flg + getDemotion(targTo.substr(1,2));
+
+ }
+
+ //setIcon(posTo,flg + icon);
+ nstate[parseInt(posTo)] = flg + icon; 
+
+ if(posFrom == "00"){
+   //nstate[poskoma] = nstate[poskoma].replace("00" + icon,"");
+   nstate[poskoma] = nstate[poskoma].replace(flg + icon,"");
+
+ }else{
+   //setIcon(posFrom," * ");
+   nstate[parseInt(posFrom)] = " * ";
+ }
+ return nstate;
+}
+
+
+
+function getLegalListS(state){
+ return getLegalList(state,"+");
+}
+
+function getLegalList(state,flg){
+ var i = 0; var j = 0; var i1 = 0; var j1 = 0;
+ var posw = 0;
+ var icon = ""; var targw = ""; var actCode="";
+ var i1min=0; var i1max=0; var j1min=0; var j1max=0;
+ res=[];
+ for(i=1;i<=9;i++){
+	for(j=1;j<=9;j++){
+		targw = state[i*10+j];
+		icon = targw.substr(1,2);
+
+		if(targw.substr(0,1)==flg){
+			i1min=1;i1max=9;j1min=1;j1max=9;
+			if(icon=="FU"){i1min=i;i1max=i;if(flg=="+"){j1min=j-1;}else{j1min=j+1;}j1max=j1min;}
+			if(icon=="KY"){i1min=i;i1max=i;if(flg=="+"){j1max=j-1;}else{j1min=j+1;}}
+			//if(icon=="KY"){i1min=i;i1max=i;}
+
+			if(icon=="KE"){i1min=i-1;i1max=i+1;j1min=j-2;j1max=j+2;}
+			if(icon=="GI" | icon=="KI" | icon=="OU" | icon=="TO" | icon=="NK" | icon=="NY"){
+				i1min=i-1;i1max=i+1;j1min=j-1;j1max=j+1;
+			}
+
+			if(j1min<1){j1min=1;} if(j1max>9){j1max=9;} if(i1min<1){i1min=1;} if(i1max>9){i1max=9;}
+			for(i1=i1min;i1<=i1max;i1++){
+				for(j1=j1min;j1<=j1max;j1++){
+					if((i==i1 & j==j1)==false){
+					//actCode= targw.substr(0,1) + (i*10+j) + (i1*10+j1) + icon;
+					actCode= targw.substr(0,1) + i + j  + i1 +j1 + icon;
+
+					if(isLegalAction(actCode,state)==true){res.push(actCode);}
+					if(icon != getPromotion(icon)){
+						actCode=flg+(i*10+j)+(i1*10+j1)+getPromotion(icon);
+						if(isLegalAction(actCode,state)==true){res.push(actCode);}
+					}
+					}
+				}
+			}
+		}
+	}
+ }
+ //持ち駒
+ if(flg=="+"){targw = state[1];}else{targw = state[2];}
+ var komalist=[];
+ if(targw.indexOf("FU")>=0){komalist.push("FU");}
+ if(targw.indexOf("KY")>=0){komalist.push("KY");}
+ if(targw.indexOf("KE")>=0){komalist.push("KE");}
+ if(targw.indexOf("GI")>=0){komalist.push("GI");}
+ if(targw.indexOf("KI")>=0){komalist.push("KI");}
+ if(targw.indexOf("KA")>=0){komalist.push("KA");}
+ if(targw.indexOf("HI")>=0){komalist.push("HI");}
+ if(komalist.length > 0){
+	if(formT.easyModeT4.value.length>0){i1max=formT.easyModeT4.value;}else{i1max=9;}
+	if(formT.easyModeT5.value.length>0){j1max=formT.easyModeT5.value;}else{j1max=9;}
+
+	for(i=0;i<komalist.length;i++){
+		for(i1=1;i1<=i1max;i1++){
+			for(j1=1;j1<=j1max;j1++){
+				actCode = flg + "00" + i1 + "" + j1 + komalist[i];
+				if(isLegalAction(actCode,state)){res.push(actCode);}				
+			}
+		}
+	}
+ }
+ return res;
+}
+
+
+
+function isOuteS(state){
+ return isOute(state,"+");
+}
+
+function getPosOu(state,flg){
+ var i = 0; var j = 0;
+ var posOu = 0; var posOux = 0; var posOuy = 0;
+ var aiteflg = getAiteFlg(flg);
+ for(i=1;i<=9;i++){
+	for(j=1;j<=9;j++){
+		if(state[i*10+j] == aiteflg + "OU"){return (i*10+j);}
+	}
+ }
+ return 0;
+}
+
+function isOute(state,flg,inPosOu=0,inPosFrom=0){
+ var i = 0; var j = 0;
+ var posOu = 0; var posOux = 0; var posOuy = 0;
+ var posw = 0;
+ var icon = ""; var targw = ""; var actcode = ""; var icon2 = "";
+ var logw="";
+ var aiteflg = getAiteFlg(flg);
+ if(inPosOu != 0){posOu=inPosOu;}else{posOu = getPosOu(state,flg);}
+ if(posOu==0){return false;}
+ if(inPosFrom != 0){
+	icon = state[inPosFrom].substr(1,2);
+	actcode=flg+inPosFrom+posOu+icon;
+	if(isLegalAction(actcode,state)){return true;}
+	posOuy = posOu % 10;
+	if(flg=="+" & posOuy <=3){icon2=getPromotion(icon);}
+	if(flg=="-" & posOuy >=7){icon2=getPromotion(icon);}
+	if(icon != icon2){
+		actcode = flg+inPosFrom+posOu+icon2;
+		if(isLegalAction(actcode,state)){return true;}
+	}
+	return false;
+ }
+ for(i=1;i<=9;i++){
+	for(j=1;j<=9;j++){
+		posw = i*10+j;
+		targw = state[posw];
+		if(targw.substr(0,1) == flg){
+			icon = targw.substr(1,2);
+			actcode = flg + posw + posOu + icon;
+			if(isLegalAction(actcode,state)){return true;}
+			//成り駒判定
+			if(flg=="+" & posOuy<= 3){icon2=getPromotion(icon);}
+			if(flg=="-" & posOuy>= 7){icon2=getPromotion(icon);}
+			if(icon2 != icon){
+				actcode = flg + posw + posOu + icon2;
+				if(isLegalAction(actcode,state)){return true;}
+			}
+		}
+	}
+ }
+ return false;
+}
+
+
+function getStateFromBoard(){
+ var state = {};
+ var i = 0; var j = 0;
+ var targw = ""; var posw = 0;
+ for(i=1;i<=9;i++){
+	for(j=1;j<=9;j++){
+		posw = i*10+j
+		targw = document.getElementById(posw).value;
+		state[posw] = targw
+	}
+ }
+ state[1] = document.getElementById(1).value;
+ state[2] = document.getElementById(2).value;
+
+ return state;
+}
+
+function isLegalAction(actCode,state){
+ var csa = form2.CSA.value;
+ var flg = actCode.substr(0,1);
+ var posFrom = actCode.substr(1,2);
+ var posTo = actCode.substr(3,2);
+ var icon = actCode.substr(5,2);
+
+ var targTo = state[parseInt(posTo)];
+
+ var posFromx = parseInt(posFrom.substr(0,1))
+ var posFromy = parseInt(posFrom.substr(1,1))
+ var posTox = parseInt(posTo.substr(0,1))
+ var posToy = parseInt(posTo.substr(1,1))
+
+ //動けないマスには移動できない
+ if(icon=="FU" | icon=="KY"){
+	if(flg=="+"){if(posToy==1){return false;}}
+	if(flg=="-"){if(posToy==9){return false;}}
+ }
+ if(icon=="KE"){
+	if(flg=="+"){if(posToy<=2){return false;}}
+	if(flg=="-"){if(posToy>=8){return false;}}
+ }
+
+
+ if(posFrom=="00"){
+		if(targTo != " * "){return false;}
+		// 持ち駒に存在しない駒は出せないチェック
+		var komalist="";
+		if(flg=="+"){komalist=state[1];}else{komalist=state[2];}
+		if(komalist.indexOf(icon) == -1){return false;}
+		//二歩の禁止
+		var iw = 0;
+		if(icon=="FU"){
+			for(iw=1;iw<=9;iw++){
+				if(state[posTox * 10 + iw] == flg + "FU"){return false;}
+			}
+		}
+ 		return true;
+ }
+ if(flg==targTo.substr(0,1)){
+		if(targTo != " * "){return false;}
+ }
+ var targFrom = state[parseInt(posFrom)];
+
+ if(flg != targFrom.substr(0,1)){return false;}
+
+ var iconFrom = targFrom.substr(1,2);
+
+ if(iconFrom != icon){
+	if(icon != getPromotion(iconFrom)){return false;}
+	if(flg=="+"){if(posFromy > 3 & posToy > 3){return false;}}
+	if(flg=="-"){if(posFromy < 7 & posToy < 7){return false;}}
+ } 
+
+
+ if(iconFrom=="FU"){
+	if(posFromx != posTox){return false;}
+	if(flg=="+"){if(posToy-posFromy != -1){return false;}}
+	if(flg=="-"){if(posToy-posFromy != +1){return false;}}
+ }
+ if(iconFrom=="KY"){
+	if(posFromx != posTox){return false;}
+	if(flg=="+"){if(posToy-posFromy > 0){return false;}}
+	if(flg=="-"){if(posToy-posFromy < 0){return false;}}
+	if(isVacantBetween(posFrom,posTo,state)==false){return false;}
+ }
+ if(iconFrom=="KE"){
+	if(posFromx - posTox != 1 & posFromx - posTox != -1){return false;}
+	if(flg=="+"){if(posToy-posFromy != -2){return false;}}
+	if(flg=="-"){if(posToy-posFromy != 2){return false;}}
+ }
+ if(iconFrom=="GI"){
+	if(posFromx - posTox >1 | posFromx - posTox < -1 | posFromy - posToy > 1 | posFromy - posToy < -1){return false;}
+	if(posFromy - posToy == 0){return false;}
+	if(flg=="+"){if(posToy-posFromy == 1 & posTox-posFromx ==0){return false;}}
+	if(flg=="-"){if(posToy-posFromy == -1 & posTox-posFromx ==0){return false;}}
+ }
+ if(iconFrom=="KI" | iconFrom=="TO" | iconFrom=="NY" | iconFrom=="NK" | iconFrom=="NG"){
+	if(posFromx - posTox >1 | posFromx - posTox < -1 | posFromy - posToy > 1 | posFromy - posToy < -1){return false;}
+	if(flg=="+"){if(posToy-posFromy == 1 & posTox-posFromx !=0){return false;}}
+	if(flg=="-"){if(posToy-posFromy == -1 & posTox-posFromx !=0){return false;}}
+ }
+ if(iconFrom=="KA"){
+	if(posFromx-posTox==0){return false;}
+	if(posFromx - posTox != posFromy - posToy & posFromx - posTox != posToy - posFromy){return false;}
+	if(isVacantBetween(posFrom,posTo,state)==false){return false;} 
+ }
+ if(iconFrom=="HI"){
+	if(posFromx-posTox != 0 & posFromy-posToy != 0){return false;}
+	if(isVacantBetween(posFrom,posTo,state)==false){return false;} 
+ }
+ if(iconFrom=="OU"){
+	if(posFromx - posTox >1 | posFromx - posTox < -1 | posFromy - posToy > 1 | posFromy - posToy < -1){return false;}
+ }
+ if(iconFrom=="UM"){
+	if(posFromx - posTox != posFromy - posToy & posFromx - posTox != posToy - posFromy){
+		if(posFromx - posTox >1 | posFromx - posTox < -1 | posFromy - posToy > 1 | posFromy - posToy < -1){return false;}	
+	}else{
+		if(isVacantBetween(posFrom,posTo,state)==false){return false;}
+	}
+ }
+ if(iconFrom=="RY"){
+	if(posFromx-posTox != 0 & posFromy-posToy != 0){
+		if(posFromx - posTox >1 | posFromx - posTox < -1 | posFromy - posToy > 1 | posFromy - posToy < -1){return false;}	
+	}else{
+		if(isVacantBetween(posFrom,posTo,state)==false){return false;}
+	}
+ }
+
+ return true; 
+}
+
+function isVacantBetween(posFrom,posTo,state){
+ var posFromx = parseInt(posFrom.substr(0,1))
+ var posFromy = parseInt(posFrom.substr(1,1))
+ var posTox = parseInt(posTo.substr(0,1))
+ var posToy = parseInt(posTo.substr(1,1))
+ var posw = 0
+ var multix = 0; var multiy = 0;
+ var targw = ""
+ var i=0; var j=0; var imax=0;
+
+ if(posFromx==posTox){multix=0;}
+ if(posFromx < posTox){multix = 1; imax = posTox - posFromx;}
+ if(posFromx > posTox){multix = -1; imax = posFromx - posTox;}
+ if(posFromy==posToy){multiy=0;}
+ if(posFromy < posToy){multiy=1; imax = posToy - posFromy;}
+ if(posFromy > posToy){multiy=-1; imax = posFromy - posToy;}
+
+ if(imax==1){return true;}
+
+ for(i=1;i<imax;i++){
+	posw = (posFromx + multix * i) + "" + (posFromy + multiy * i)
+	targw = state[parseInt(posw)];
+	if(targw != " * "){return false;}
+ } 
+ return true;
+}
+////  詰将棋ボタンを押したときの挙動 ////
+function execIsLegal(){
+ var actCode = formT.actCodeT.value;
+ var state1 = getStateFromBoard();
+ res = isLegalAction(actCode,state1);
+ formT.resT.value = res;
+}
+
+function execIsOuteS(){
+ var state1 = getStateFromBoard();
+ res = isOuteS(state1);
+ formT.resT.value = res;
+}
+
+function execShowLegalList(){
+ var state1 = getStateFromBoard();
+ var legallist = getLegalList(state1,"+");
+ if(formT.resT.value == "-"){legallist = getLegalList(state1,"-");}
+ alert((legallist.length));
+ alert(legallist);
+}
+
+function execShowOuteList(){
+ var state1 = getStateFromBoard();
+ if(isOuteS(state1)){alert('すでに王手です。');return;}
+ var outelist = getOuteListS(state1);
+ alert((outelist.length));
+ alert(outelist);
+}
+
+function execShowNogareList(){
+ var state1 = getStateFromBoard();
+ if(isOuteS(state1)==false){alert('王手されていません。');return;}
+ var nogarelist = getNogareListG(state1);
+ alert((nogarelist.length));
+ alert(nogarelist);
+}
+
+function execShowAllList(){
+ var state1 = getStateFromBoard();
+ var maxstep = parseInt(formT.actCodeT.value);
+ var alllist = getAllList(state1,"+",maxstep);
+ alert(alllist.length);
+ alert(alllist);
+}
+
+function execShowTsumiList(){
+ var state1 = getStateFromBoard();
+ var maxstep = parseInt(formT.actCodeT.value);
+ getTsumiList2(state1,"+",maxstep);
+ //var alllist = getTsumiList(state1,"+",maxstep);
+ //alert(alllist.length);
+ //alert(alllist);
+}
+
+//////////////////
+
+//初期配置
+function setInitialPosition(){
+ var csa = form2.CSA.value;
+ var ps = csa.split("\n");
+ var i = 0;
+
+ form2.currentBoard.value = "";
+ for(i=0;i< ps.length;i++){
+	if(ps[i].substr(0,11) == "$START_TIME"){
+		form1.matchDateFrom.value = ps[i].substr(12,19);
+	}
+	if(ps[i].substr(0,6) == "$EVENT"){
+		form1.matchEvent.value = ps[i].substr(7,ps[i].length-7);
+	}
+	if(ps[i].substr(0,2) == "N+"){
+		document.getElementById("formerName").innerText = ps[i].substr(2,);
+	}
+	if(ps[i].substr(0,2) == "N-"){
+		document.getElementById("latterName").innerText = ps[i].substr(2,);
+	}
+	if(ps[i].substr(0,1) == "P"){
+		form2.currentBoard.value += ps[i] + "\n";
+	}
+ }
+ form2.currentSeq.value = 0;
+ setBoard();
+}
+
+//実際の一手の処理(+2726FUなど)
+function execAction(actCode){
+ var flg = actCode.substr(0,1);
+ var posFrom = actCode.substr(1,2);
+ var posTo = actCode.substr(3,2);
+ var icon = actCode.substr(5,2);
+
+ var targTo = document.getElementById(parseInt(posTo));
+ 
+ //相手の駒があれば取る
+ if(targTo.value != " * "){
+    setStock(flg,targTo.value.substr(1,2));
+ }
+
+ setIcon(posTo,flg + icon);
+ if(posFrom == "00"){
+   popStock(flg,icon);
+ }else{
+   setIcon(posFrom," * ");
+ }
+ //最後の駒のみ太字とし、それ以外はノーマルフォントにする。
+ if(lastPos != ""){
+	 document.getElementById(lastPos).style.fontWeight = "normal";
+ }
+ targTo.style.fontWeight = "bold";
+ lastPos = posTo;
+}
+
+//盤面の情報を、CSA形式で書き出す。
+function getBoard(){
+  var cb = "";
+  var pline = "";
+  var i = 0; var j = 0;
+  var pos;
+  var info;
+
+  for(i=1;i<=9;i++){
+	pline = "P" + i;
+	for(j=9;j>=1;j--){
+		pos = j * 10 + i;
+		info = document.getElementById(pos).value;
+		pline += info;
+	}
+	cb += pline + "\n";
+  }
+  info = document.getElementById(1).value;
+  if(info != ""){
+	pline = "P" + info.substr(0,1);
+	for(j=0;j<info.length / 3;j++){
+		pline += "00" + info.substr(j*3+1,2);
+	}
+  	cb += pline + "\n";
+  }
+  info = document.getElementById(2).value;
+  if(info != ""){
+	pline = "P" + info.substr(0,1);
+	for(j=0;j<info.length / 3;j++){
+		pline += "00" + info.substr(j*3+1,2);
+	}
+	  cb += pline ;
+  }
+  form2.currentBoard.value = cb;
+}
+
+function getBoardFromState(state){
+  var cb = "";
+  var pline = "";
+  var i = 0; var j = 0;
+  var pos;
+  var info;
+
+  for(i=1;i<=9;i++){
+	pline = "P" + i;
+	for(j=9;j>=1;j--){
+		pos = j * 10 + i;
+		info = state[pos];
+		pline += info;
+	}
+	cb += pline + "\n";
+  }
+  info = state[1];
+  if(info != ""){
+	pline = "P" + info.substr(0,1);
+	for(j=0;j<info.length / 3;j++){
+		pline += "00" + info.substr(j*3+1,2);
+	}
+  	cb += pline + "\n";
+  }
+  info = state[2];
+  if(info != ""){
+	pline = "P" + info.substr(0,1);
+	for(j=0;j<info.length / 3;j++){
+		pline += "00" + info.substr(j*3+1,2);
+	}
+	  cb += pline ;
+  }
+  form2.currentBoard.value = cb;
+}
+
+
+
+
+
+//状態を盤面に反映させる（はじめの１回のみ）
+function setBoard(){
+  var cb = form2.currentBoard.value;
+  var ps = cb.split("\n");
+  var i = 0;
+  var j = 0;
+  var row;
+  var pos;
+  document.getElementById(1).innerText = "";
+  document.getElementById(2).innerText = "";
+  document.getElementById(1).value = "";
+  document.getElementById(2).value = "";
+  document.getElementById(3).style.transform="rotate(180deg)";
+  document.getElementById(3).style.display = "inline-block";
+  document.getElementById(1).style.width = 120;
+  document.getElementById(2).style.width = 120;
+  for(i=0;i< ps.length;i++){
+	if(ps[i].substr(0,1) == "P"){
+		row = ps[i].substr(1,1);
+		if(row == "+" || row == "-"){
+			for(j=0;j<ps[i].length / 4;j++){
+				setStock(row,ps[i].substr(j*4 + 4,2));
+
+			}
+		}else{
+			for(j=0;j<9;j++){
+				setIcon((9-j) *10 + parseInt(row),ps[i].substr(j*3 + 2,3));
+			}
+		}
+	}
+  }
+}
+
+//一手進める
+function proceedSeq(){
+ var currentSeq = parseInt(form2.currentSeq.value);
+ var Csa = form2.CSA.value;
+ var lines = Csa.split("\n");
+ var i = 0; var ix=0;
+ var actionCode = "";
+ for(i=0;i < lines.length;i++){
+	if(lines[i].substr(0,1) == "+" || lines[i].substr(0,1) == "-"){
+	  if(lines[i].length >= 7){
+		ix += 1;
+		if(ix > currentSeq){
+			actionCode = lines[i].substr(0,7);
+			break;
+		}
+	  }
+	}
+ }
+
+ if(actionCode==""){return;}
+ execAction(actionCode);
+ currentSeq += 1;
+ form2.currentSeq.value = currentSeq;
+ getBoard();
+
+ form2.CSAComment.value="";
+ if(i + 1<lines.length){
+	if(lines[i+1].substr(0,1)=="+" || lines[i+1].substr(0,1)=="-"){
+	}else{form2.CSAComment.value=lines[i+1];
+	}
+ }
+
+
+}
+
+//局面まで進める
+function proceedSeqs(){
+ var currentSeq = parseInt(form2.currentSeq.value);
+ var i = 0;
+ setInitialPosition();
+ for(i=1;i<=currentSeq;i++){
+	proceedSeq();
+ }
+}
+//CSAを分割
+function splitCSA(){
+ var Csa=form2.CSA.value;
+ var Csa1=""; var Csa2="";
+ var lines = Csa.split("\n");
+ var i = 0;var seq = 0;
+ var currentSeq=parseInt(form2.currentSeq.value);
+ for(i=0;i<lines.length;i++){
+	if(lines[i].substr(0,1) == "+" || lines[i].substr(0,1) == "-"){
+	  if(lines[i].length >= 7){
+		seq+=1;
+	 }
+	}
+	if(seq<=currentSeq){Csa1+=lines[i]+"\n";}else{Csa2+=lines[i]+"\n";}
+ }
+ form2.CSA.value=Csa1;
+ form2.CSASplit.value=Csa2; 
+}
+function setIcon(pos,iconCode){
+ var flg = iconCode.substr(0,1);
+ var icon = iconCode.substr(1,2);
+
+ var marker = getMarker(icon); 
+
+ var targ = document.getElementById(pos);
+ targ.innerText = marker;
+ targ.style.display = "inline-block";
+ targ.style.fontWeight = "normal";
+ targ.value = iconCode;
+ if(flg=="-"){
+		targ.style.transform = "rotate(180deg)";
+	     }else{
+		targ.style.transform = "rotate(0deg)";
+ }
+ //成のつく駒はフォントを半分にする。本当は行間も縮めたい。
+ if(icon.substr(0,1) == "N"){
+	targ.style.fontSize = "0.6em";
+	}else{
+	targ.style.fontSize = "1em";
+ }
+ targ.style.lineHeight="-0.2em";
+}
+
+//持ち駒に加える処理。
+function setStock(flg,iconCode){
+ var pos; var marker;var icon;
+ if(flg=="+"){pos=1;}else{pos=2;}
+ icon = getDemotion(iconCode);
+ marker = getMarker(icon);
+ if(marker == ""){return;}
+ var targ = document.getElementById(pos);
+ targ.innerText += marker;
+// targ.value += flg + iconCode;
+ targ.value += flg + icon;
+
+}
+
+//持ち駒を減らす処理。
+function popStock(flg,iconCode){
+ var pos; var marker; var icon;
+ if(flg=="+"){pos=1;}else{pos=2;}
+ marker = getMarker(iconCode);
+ var targ = document.getElementById(pos);
+ targ.value = targ.value.replace(flg + iconCode,"");
+ targ.innerText = targ.innerText.replace(marker,"");
+}
+
+//駒コード＝＞駒名称の変換
+function getMarker(icon){
+ if(icon=="* "){return "";}
+ if(icon=="FU"){return "歩";}
+ if(icon=="KY"){return "香";}
+ if(icon=="KE"){return "桂";}
+ if(icon=="GI"){return "銀";}
+ if(icon=="KI"){return "金";}
+ if(icon=="KA"){return "角";}
+ if(icon=="HI"){return "飛";}
+ if(icon=="TO"){return "と";}
+ if(icon=="NY"){return "成\n香";}
+ if(icon=="NK"){return "成\n桂";}
+ if(icon=="NG"){return "成\n銀";}
+ if(icon=="OU"){return "玉";}
+ if(icon=="UM"){return "馬";}
+ if(icon=="RY"){return "龍";}
+ return "";
+}
+
+//成駒（裏）＝＞通常駒（表）
+function getDemotion(icon){
+ if(icon=="TO"){return "FU";}
+ if(icon=="NY"){return "KY";}
+ if(icon=="NK"){return "KE";}
+ if(icon=="NG"){return "GI";}
+ if(icon=="UM"){return "KA";}
+ if(icon=="RY"){return "HI";}
+ return icon;
+}
+function getPromotion(icon){
+ if(icon=="FU"){return "TO";}
+ if(icon=="KY"){return "NY";}
+ if(icon=="KE"){return "NK";}
+ if(icon=="GI"){return "NG";}
+ if(icon=="KA"){return "UM";}
+ if(icon=="HI"){return "RY";}
+ return icon;
+}
+//先後逆
+function setInverse(){
+ var Csa = form2.CSA.value;
+ var lines = Csa.split("\n");
+ var i = 0;
+ var iCsa = "";
+ for(i=0;i<lines.length;i++){
+	iCsa += getInverseLine("" + lines[i]) + "\n";
+ }
+ form2.CSA.value = iCsa;
+}
+
+function getInverseLine(line){
+ var iline = "";
+ var chw = "";
+ var i;
+ if(line.substr(0,1) == "P" || line.substr(0,1) == "N" 
+	|| line.substr(0,1) == "+" || line.substr(0,1) == "-" ){
+	 for(i = 0;i< line.length ;i++){
+		chw = "";
+		if(line.substr(i,1) == "+"){chw = "-";}
+		if(line.substr(i,1) == "-"){chw = "+";}
+		if(i <= 4){
+		 if(line.substr(i,1) == "1"){chw = "9";}
+		 if(line.substr(i,1) == "2"){chw = "8";}
+		 if(line.substr(i,1) == "3"){chw = "7";}
+		 if(line.substr(i,1) == "4"){chw = "6";}
+		 if(line.substr(i,1) == "5"){chw = "5";}
+		 if(line.substr(i,1) == "6"){chw = "4";}
+		 if(line.substr(i,1) == "7"){chw = "3";}
+		 if(line.substr(i,1) == "8"){chw = "2";}
+		 if(line.substr(i,1) == "9"){chw = "1";}
+		}
+		if(chw == ""){chw = line.substr(i,1);}
+		iline += chw;
+	}
+ }
+ if(iline.substr(0,1) == "P" & iline.length == 29){
+	chw = iline.substr(0,2)
+	for(i=1;i<=9;i++){
+		chw += iline.substr( 3 * (9 - i) + 2,3);
+	}
+	return chw;
+ }
+ if(iline != ""){return iline;}
+ return line;
+}
+
+//入力値追加
+function addCsa(){
+ if(form2.inputCSA.value.length==7){
+	if(isLegalAction(form2.inputCSA.value,getStateFromBoard()) == false){alert('illegal');return;}
+	if(isUchifu(form2.inputCSA.value,getStateFromBoard()) ){alert('打ち歩詰め！');return;}
+ }
+
+ form2.CSA.value += "\n" + form2.inputCSA.value;
+ if(form2.inputCSA.value.length!=7){form2.inputCSA.value = "";return;} 
+ proceedSeq();
+ form2.inputCSAStock0.value="0";form2.inputCSAStock1.value="1";
+ form2.inputCSAStock2.value="2";form2.inputCSAStock3.value="3";
+ form2.inputCSAStock4.value="4";form2.inputCSAStock5.value="5";
+ form2.inputCSA.value = "";
+}
+
+//一手シミュレーション(履歴をとらない、手を進めない）
+function execSimulation(){
+ var actionCode = form2.inputCSA.value;
+ execAction(actionCode);
+ getBoard();
+}
+
+//CSAクリア
+function clearCsa(){
+ form2.CSA.value = "";
+}
+
+//盤上クリック
+function execClick(pos){
+ if(""+pos==""+lastClick){return;} //test
+ var posValue = document.getElementById(pos).value;
+ if(lastClick==""){lastClick=pos;form2.inputCSA.value=lastClick;return;}
+ var lastClickValue=document.getElementById(lastClick).value;
+ if(lastClickValue==" * "){lastClick="";form2.inputCSA.value="";return;}
+ if(lastClick==1 || lastClick==2){form2.inputCSA.value+=pos;lastClick="";return;}
+ if(lastClickValue.substr(0,1)==posValue.substr(0,1)){
+	lastClick=pos;form2.inputCSA.value=lastClick;return;
+	}
+ form2.inputCSA.value = lastClickValue.substr(0,1) + lastClick + pos + lastClickValue.substr(1,2);
+ lastClick="";
+}
+//持ち駒クリック
+function execClick2(id){
+ if(id==1){form2.inputCSA.value="+00";}else{form2.inputCSA.value="-00";}
+ lastClick=id;
+ //持ち駒番号クリックサービスに駒を表示
+ var stk = document.getElementById(id).value; var stk2 = "";
+ //重複を排除
+ var i = 0; var icon=""; var j = 0; var skp = 0;
+ for(i=0;i<= stk.length / 3; i++){
+	if(stk.length >= i * 3){
+		icon = stk.substr(i*3 - 2,2);
+		skp = 0;
+		for(j=0;j<i;j++){
+			if(icon == stk.substr(j*3 - 2,2) ){skp = 1;}
+		}
+		if(skp==0){stk2 += stk.substr(0,1) + icon;}
+	}
+ }
+ stk = stk2;
+ if(stk.length >= 3){form2.inputCSAStock0.value = getMarker(stk.substr(1,2));
+	}else{form2.inputCSAStock0.value="0";}	
+ if(stk.length >= 6){form2.inputCSAStock1.value = getMarker(stk.substr(4,2));
+	}else{form2.inputCSAStock1.value="1";}
+ if(stk.length >= 9){form2.inputCSAStock2.value = getMarker(stk.substr(7,2));
+	}else{form2.inputCSAStock2.value="2";}
+ if(stk.length >= 12){form2.inputCSAStock3.value = getMarker(stk.substr(10,2));
+	}else{form2.inputCSAStock3.value="3";}
+ if(stk.length >= 15){form2.inputCSAStock4.value = getMarker(stk.substr(13,2));
+	}else{form2.inputCSAStock4.value="4";}
+ if(stk.length >= 18){form2.inputCSAStock5.value = getMarker(stk.substr(16,2));
+	}else{form2.inputCSAStock5.value="5";}
+
+}
+//成る
+function addCsaPromotion(){
+ var vl = form2.inputCSA.value;
+ form2.inputCSA.value = vl.substr(0,5) + getPromotion(vl.substr(5,2));
+}
+//持ち駒選択
+function addCsaStock(seq){
+ var flg = form2.inputCSA.value.substr(0,1);
+ var pos = 1;
+ if(flg=="-"){pos=2};
+ var stk = document.getElementById(pos).value;
+ var stk2 = "";
+ //重複を排除
+ var i = 0; var icon=""; var j = 0; var skp = 0;
+ for(i=0;i<= stk.length / 3; i++){
+	if(stk.length >= i * 3){
+		icon = stk.substr(i*3 - 2,2);
+		skp = 0;
+		for(j=0;j<i;j++){
+			if(icon == stk.substr(j*3 - 2,2) ){skp = 1;}
+		}
+		if(skp==0){stk2 += stk.substr(0,1) + icon;}
+	}
+ }
+ stk = stk2;
+ var stkSelect = stk.substr(3 * seq + 1,2);
+ form2.inputCSA.value += stkSelect;
+}
+function addCsaInput(vl){
+ form2.inputCSA.value += vl;
+}
+//ファイル読み込み
+function loadCsa2(){
+ alert('check1');
+ var folderPath = "C://Users/masahiro/Documents/懺悔の部屋アプリ/棋譜";
+ alert('check11');
+ var fso = new ActiveXObject("Scripting.FileSystemObject");
+ var filePath = folderPath + "/" + form2.loadCSAPath.value;
+ alert('check2 ');
+ alert(filePath);
+ var fl = fso.OpenTextFile(folderPath,1);
+ alert('check3');
+ var csa = fl.readAll();
+ alert('check4');
+ form2.CSA.value = csa;
+ alert('check5');
+}
+function loadCsa3(){
+
+ var item=document.getElementById("file_api_input2").files[0];
+ 
+
+ var fr = new FileReader();
+ fr.onload=onFileLoad;
+// fr.readAsText(item,"UTF-8");
+ fr.readAsText(item,"sjis");
+
+}
+function onFileLoad(e){
+  var csa=e.target.result;
+  form2.CSA.value = csa;
+  setInitialPosition();
+}
+
+/////////////////////////////
+///  END of the Script //////
+/////////////////////////////
+</script>
+
+</head>
+<body>
+
+<form name = "form1">
+<table border = 2>
+<tr>
+<td>
+<div id=3>
+<div id="latterName"></div>
+後手持ち駒
+<div id=2 onClick=execClick2(2)>02</div>
+</div>
+</td>
+
+<td>
+<table border = 1>
+<tr align = "center">
+<td width=20>9</td>
+<td width=20>8</td>
+<td width=20>7</td>
+<td width=20>6</td>
+<td width=20>5</td>
+<td width=20>4</td>
+<td width=20>3</td>
+<td width=20>2</td>
+<td width=20>1</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(91)><div id=91>91</div></td>
+<td onClick=execClick(81)><div id=81>81</div></td>
+<td onClick=execClick(71)><div id=71>71</div></td>
+<td onClick=execClick(61)><div id=61>61</div></td>
+<td onClick=execClick(51)><div id=51>51</div></td>
+<td onClick=execClick(41)><div id=41>41</div></td>
+<td onClick=execClick(31)><div id=31>31</div></td>
+<td onClick=execClick(21)><div id=21>21</div></td>
+<td onClick=execClick(11)><div id=11>11</div></td>
+<td>一</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(92)><div id=92>92</div></td>
+<td onClick=execClick(82)><div id=82>82</div></td>
+<td onClick=execClick(72)><div id=72>72</div></td>
+<td onClick=execClick(62)><div id=62>62</div></td>
+<td onClick=execClick(52)><div id=52>52</div></td>
+<td onClick=execClick(42)><div id=42>42</div></td>
+<td onClick=execClick(32)><div id=32>32</div></td>
+<td onClick=execClick(22)><div id=22>22</div></td>
+<td onClick=execClick(12)><div id=12>12</div></td>
+<td>二</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(93)><div id=93>93</div></td>
+<td onClick=execClick(83)><div id=83>83</div></td>
+<td onClick=execClick(73)><div id=73>73</div></td>
+<td onClick=execClick(63)><div id=63>63</div></td>
+<td onClick=execClick(53)><div id=53>53</div></td>
+<td onClick=execClick(43)><div id=43>43</div></td>
+<td onClick=execClick(33)><div id=33>33</div></td>
+<td onClick=execClick(23)><div id=23>23</div></td>
+<td onClick=execClick(13)><div id=13>13</div></td>
+<td>三</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(94)><div id=94>94</div></td>
+<td onClick=execClick(84)><div id=84>84</div></td>
+<td onClick=execClick(74)><div id=74>74</div></td>
+<td onClick=execClick(64)><div id=64>64</div></td>
+<td onClick=execClick(54)><div id=54>54</div></td>
+<td onClick=execClick(44)><div id=44>44</div></td>
+<td onClick=execClick(34)><div id=34>34</div></td>
+<td onClick=execClick(24)><div id=24>24</div></td>
+<td onClick=execClick(14)><div id=14>14</div></td>
+<td>四</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(95)><div id=95>95</div></td>
+<td onClick=execClick(85)><div id=85>85</div></td>
+<td onClick=execClick(75)><div id=75>75</div></td>
+<td onClick=execClick(65)><div id=65>65</div></td>
+<td onClick=execClick(55)><div id=55>55</div></td>
+<td onClick=execClick(45)><div id=45>45</div></td>
+<td onClick=execClick(35)><div id=35>35</div></td>
+<td onClick=execClick(25)><div id=25>25</div></td>
+<td onClick=execClick(15)><div id=15>15</div></td>
+<td>五</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(96)><div id=96>96</div></td>
+<td onClick=execClick(86)><div id=86>86</div></td>
+<td onClick=execClick(76)><div id=76>76</div></td>
+<td onClick=execClick(66)><div id=66>66</div></td>
+<td onClick=execClick(56)><div id=56>56</div></td>
+<td onClick=execClick(46)><div id=46>46</div></td>
+<td onClick=execClick(36)><div id=36>36</div></td>
+<td onClick=execClick(26)><div id=26>26</div></td>
+<td onClick=execClick(16)><div id=16>16</div></td>
+<td>六</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(97)><div id=97>97</div></td>
+<td onClick=execClick(87)><div id=87>87</div></td>
+<td onClick=execClick(77)><div id=77>77</div></td>
+<td onClick=execClick(67)><div id=67>67</div></td>
+<td onClick=execClick(57)><div id=57>57</div></td>
+<td onClick=execClick(47)><div id=47>47</div></td>
+<td onClick=execClick(37)><div id=37>37</div></td>
+<td onClick=execClick(27)><div id=27>27</div></td>
+<td onClick=execClick(17)><div id=17>17</div></td>
+<td>七</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(98)><div id=98>98</div></td>
+<td onClick=execClick(88)><div id=88>88</div></td>
+<td onClick=execClick(78)><div id=78>78</div></td>
+<td onClick=execClick(68)><div id=68>68</div></td>
+<td onClick=execClick(58)><div id=58>58</div></td>
+<td onClick=execClick(48)><div id=48>48</div></td>
+<td onClick=execClick(38)><div id=38>38</div></td>
+<td onClick=execClick(28)><div id=28>28</div></td>
+<td onClick=execClick(18)><div id=18>18</div></td>
+<td>八</td>
+</tr>
+<tr align = "center">
+<td onClick=execClick(99)><div id=99>99</div></td>
+<td onClick=execClick(89)><div id=89>89</div></td>
+<td onClick=execClick(79)><div id=79>79</div></td>
+<td onClick=execClick(69)><div id=69>69</div></td>
+<td onClick=execClick(59)><div id=59>59</div></td>
+<td onClick=execClick(49)><div id=49>49</div></td>
+<td onClick=execClick(39)><div id=39>39</div></td>
+<td onClick=execClick(29)><div id=29>29</div></td>
+<td onClick=execClick(19)><div id=19>19</div></td>
+<td>九</td>
+</tr>
+
+
+</table>
+</td>
+<td>
+<div id="formerName"></div>
+先手持ち駒
+<div id=1 onClick = execClick2(1)>01</div>
+</td>
+</tr>
+<tr>
+対局日時：<input type="text" name="matchDateFrom" size = 20>
+イベント：<input type="text" name="matchEvent" size = 20>
+</tr>
+</table>
+</form>
+<form name = "form2">
+CSA追加：<input type="text" name="inputCSA" size = 8>
+<input type="button" value="追加" onClick=addCsa()>
+<input type="button" value="成る" onClick=addCsaPromotion()>
+<input type="button" value="変化検討" onClick=execSimulation()>
+<br>
+　　　　　　持駒：
+<input type="button" value="0" name="inputCSAStock0" onClick=addCsaStock(0)>
+<input type="button" value="1" name="inputCSAStock1" onClick=addCsaStock(1)>
+<input type="button" value="2" name="inputCSAStock2" onClick=addCsaStock(2)>
+<input type="button" value="3" name="inputCSAStock3" onClick=addCsaStock(3)>
+<input type="button" value="4" name="inputCSAStock4" onClick=addCsaStock(4)>
+<input type="button" value="5" name="inputCSAStock5" onClick=addCsaStock(5)>
+　
+<input type="button" value="図" onClick=addCsaInput("'図")>
+<input type="button" value="休憩等" onClick=addCsaInput("'休憩等")>
+<input type="button" value="投了" onClick=addCsaInput("%TORYO")>
+
+<br>
+
+CSA 
+<input type="text" name="CSAComment" size=12>
+<br>
+<textarea name="CSA" rows = "10" cols = "35">
+$EVENT:
+$START_TIME:
+N+
+N-
+P1-KY-KE-GI-KI-OU-KI-GI-KE-KY
+P2 * -HI *  *  *  *  * -KA * 
+P3-FU-FU-FU-FU-FU-FU-FU-FU-FU
+P4 *  *  *  *  *  *  *  *  * 
+P5 *  *  *  *  *  *  *  *  * 
+P6 *  *  *  *  *  *  *  *  * 
+P7+FU+FU+FU+FU+FU+FU+FU+FU+FU
+P8 * +KA *  *  *  *  * +HI * 
+P9+KY+KE+GI+KI+OU+KI+GI+KE+KY
+</textarea>
+<input type="button" value="クリア" onClick=clearCsa()>
+<input type="button" value="先後逆" onClick=setInverse()>
+<br>
+
+<input type="button" value="初期配置" onClick=setInitialPosition()>
+手数<input type="text" name="currentSeq" size = 4>
+<input type="button" value="次の一手" onClick=proceedSeq()>
+<input type="button" value="局面まで進める" onClick=proceedSeqs()>
+<input type="button" value="分割" onClick=splitCSA()>
+<br>
+<textarea name="currentBoard" rows = "12" cols = "35">
+</textarea>
+<textarea name="CSASplit" rows="12" cols="20">
+</textarea>
+
+<br>
+ファイル読込用<input type="text" name="loadCSAPath" size=50>
+<input type="button" value="ファイル読み込み" onClick=loadCsa3()>
+<br>
+<input type="file" id="file_api_input2" onchange="loadCsa3()">
+</form>
+
+
+<form name="formT">
+<input type="text" name="actCodeT" size = 4>
+<input type="button" value="リーガルチェック" onClick=execIsLegal()>
+<input type="button" value="王手チェック" onClick=execIsOuteS()>
+<input type="text" name="resT" size=20><br>
+<input type="button" value="リーガルリスト" onClick=execShowLegalList()>
+<input type="button" value="王手リスト" onClick=execShowOuteList()>
+<input type="button" value="逃れリスト" onClick=execShowNogareList()>
+<input type="button" value="全リスト" onClick=execShowAllList()>
+<input type="button" value="詰みリスト" onClick=execShowTsumiList()>
+
+<input type="button" value="てすと１" onClick=execTest1()><br>
+簡易モード:玉方持駒なし<input type= "text" name="easyModeT1" value= 0 size=1>
+持駒歩香のみ<input type="tex" name="easyModeT2" value=1 size=1>
+歩角飛不成禁止<input type="text" name="easyModeT3" value = 1 size=1>
+空白X<input type="text" name="easyModeT4"  size=1>
+空白Y<input type="text" name="easyModeT5" value = 7 size=1>
+<br>
+<textarea name="logT" rows="10" cols = "120"></textarea>
+</form>
+
+
+</body>
+</html>
