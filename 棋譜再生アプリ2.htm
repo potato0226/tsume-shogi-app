@@ -6,14 +6,12 @@
  var lastClick = "";
 
 function execTest1(){
- var state1 = getStateFromBoard();
- alert(state1[11]);
- alert(state1[1]);
- state1 = getFutureState("+0088KI",state1);
- alert(state1[1]);
+ var alldict={"+1311FU":0,"+1311FU-2311OU":0,"+1322FU-2311OU+2331KI":0,"KEYS":["+1311FU","+1311FU-2311OU","+1322FU-2311OU+2331KI"]};
+ var explorelist=[];
+ var action = "+1322FU-2311OU+2331KI";
+ alert(isTsumiFound(alldict,action,explorelist));
 
- getBoardFromState(state1);
- alert("end");
+
 }
 
 function setFinalList(alllist,alldict,maxstep){
@@ -37,16 +35,24 @@ function setFinalList(alllist,alldict,maxstep){
 }
 
 function exploreActionAsync(alllist,state,flg,alldict,maxstep,explorelist){
+	//if(alldict["FOUND"] == 1){formT.logT.value+="FOUND" + "\n";setFinalList(alllist,alldict,maxstep);return;}
+
 	if(explorelist.length==0){setFinalList(alllist,alldict,maxstep);return;
 	}else{
 		alldict["COUNT"] += 1;
 		actions=explorelist.pop();
+
+		if(actions.length==7){if(isTsumiExists(alldict,explorelist)){
+			formT.logT.value+="FOUND"+"\n";setFinalList(alllist,alldict,maxstep);return;}
+		}
+
 		exploreNextActions2(alllist,actions,state,flg,alldict,maxstep,explorelist);
 		if(alldict["COUNT"] % 10 ==1){
 
 		var ptime = parseInt((Date.now() - alldict["STIME"]) /1000);
 		var cnt = alldict["COUNT"];
 		formT.resT.value= ptime + "sec; " + cnt + "; "  + explorelist.length + " / " + alllist.length;
+
 		setTimeout(function(a,b,c,d,e,f){exploreActionAsync(a,b,c,d,e,f);},10,alllist,state,flg,alldict,maxstep,explorelist);
 		}else{
 			exploreActionAsync(alllist,state,flg,alldict,maxstep,explorelist);
@@ -78,6 +84,10 @@ function exploreNextActions2(alllist,actions,state,flg,alldict,maxstep,exploreli
 			var prev_action=actions.substr(0,actions.length-7);
 			//if(isEmptyAction(alldict,prev_action)){updateParentDict(alldict,prev_action);}
 			if(isEmptyAction(alldict,prev_action)){updateParentDict(alldict,prev_action,alldict["KEYS"]);}
+		}else{
+			//if(isTsumiFound(alldict,actions,explorelist)){alert("FOUND");alldict["FOUND"] = 1;}
+			//formT.logT.value+="tsumi hantei.." + actions + alldict["FOUND"] + "\n";
+			alldict[actions]=1;
 		}
 	}
 
@@ -126,6 +136,7 @@ function getTsumiList2(state,flg,maxstep){
  alldict["ETIME"] = Date.now();
  alldict["COUNT"] = 0;
  alldict["KEYS"] = newlist;
+ alldict["FOUND"] = 0;
  formT.logT.value=""; formT.resT.value="";
  exploreActionAsync(alllist,state,flg,alldict,maxstep,explorelist,10);
 }
@@ -228,11 +239,13 @@ function isEmptyAction(alldict,action){
 	return true;
 }
 
+
+
   //整列済みのリスト付き
 function isEmptyActionR(alldict,action,dictkeys){
 	var dictkey="";
 	ix=dictkeys.indexOf(action);
-	if(ix==-1){return;}
+	if(ix==-1){return false;}
 	for(i=0;i<=dictkeys.length-ix-1;i++){
 		dictkey=dictkeys[ix+i];
 		if(dictkey.substr(0,action.length)!=action){break;}
@@ -243,6 +256,61 @@ function isEmptyActionR(alldict,action,dictkeys){
 	return true;
 }
 
+
+//原則、一手目を調べ尽くした後に行う。
+//偶数手で調べていない手が存在しない事？
+function isTsumiExists(alldict,explorelist){
+	var kouholist=[];
+	dictkeys=alldict["KEYS"].sort();
+	for(i=0;i<=dictkeys.length-1;i++){
+		dictkey=dictkeys[i];
+		if(alldict[dictkey]==1){kouholist.push(dictkey);}
+	}
+	if(kouholist.length==0){return false;}
+	for(i=0;i<=kouholist.length-1;i++){
+		var firstaction=kouholist[i].substr(0,7);
+		var tsumiflg = 1;
+		for(j=0;j<=explorelist.length-1;j++){
+			if(explorelist[i].substr(0,7)==firstaction){tsumiflg=0;break;}
+		}
+		if(tsumiflg==1){return true;}
+	}
+
+	return false;
+}
+
+
+
+
+//詰み発見の判定 前提として、アクションそのものは詰みである事。
+function isTsumiFound(alldict,action,explorelist){
+	alldict[action] = 1;
+	alldict["KEYS"].sort();
+	dictkeys=alldict["KEYS"];
+
+	var firstaction=action.substr(0,7);
+
+
+	for(i=0;i<=explorelist.length-1;i++){
+		if(explorelist[i].substr(0,7)==firstaction){return false;}
+	}
+	return true;
+
+
+	var dictkey="";
+	ix=dictkeys.indexOf(firstaction);
+	if(ix==-1){return true;}	
+
+	//１手目に未探索の手が存在しなければ、詰み発見
+	for(i=0;i<=dictkeys.length-ix-1;i++){
+		dictkey=dictkeys[ix+i];
+		if(dictkey.substr(0,firstaction.length)!=firstaction){break;}
+		if(dictkey in alldict){
+			if(alldict[dictkey] == 0 ){return false;}
+		}
+	}
+	return true;
+}
 
 
 
